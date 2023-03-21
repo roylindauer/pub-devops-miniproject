@@ -2,6 +2,7 @@ import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
+import { Platform } from 'aws-cdk-lib/aws-ecr-assets'
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as path from 'path';
@@ -15,7 +16,7 @@ const stack = new cdk.Stack(app, 'EMD-FargateService15',
 // Create VPC
 const vpc = new ec2.Vpc(stack, 'VPC', {
   maxAzs: 2,
-  natGateways: 0,
+  natGateways: 2,
 });
 
 // Create Load Balancer
@@ -39,7 +40,7 @@ const fargateTaskDefinition = new ecs.FargateTaskDefinition(stack, `EMD-FargateT
 const fargateContainer = new ecs.ContainerDefinition(stack, `EMD-FargateContainer`, {
   taskDefinition: fargateTaskDefinition,
   containerName: 'EMD-FargateContainer',
-  image: ecs.ContainerImage.fromAsset(path.resolve(__dirname, '../local-image')),
+  image: ecs.ContainerImage.fromAsset(path.resolve(__dirname, '../local-image'), { platform: Platform.LINUX_AMD64 }),
   portMappings: [
       {
           containerPort: 80,
@@ -49,6 +50,7 @@ const fargateContainer = new ecs.ContainerDefinition(stack, `EMD-FargateContaine
   ],
   environment: {
       EMD_VAR: 'option 1',
+      FAVORITE_DESSERT: 'cookies'
   },
   logging: new ecs.AwsLogDriver({ streamPrefix: "infra" })
 });
@@ -60,21 +62,21 @@ const ec2SecurityGroup = new ec2.SecurityGroup(stack, 'EMD-EC2SecurityGroup', {
 });
 
 // Allow HTTP traffic from the load balancer
-ec2SecurityGroup.addIngressRule(
-  ec2.Peer.anyIpv4(),
-  ec2.Port.tcp(80),
-  'Allow All HTTP traffic'
-);
+// ec2SecurityGroup.addIngressRule(
+//   ec2.Peer.anyIpv4(),
+//   ec2.Port.tcp(80),
+//   'Allow All HTTP traffic'
+// );
 
 const service = new ecs.FargateService(stack, `EMD-ecs-service`, {
-  assignPublicIp: true,
+  assignPublicIp: false,
   cluster: cluster,
   taskDefinition: fargateTaskDefinition,
   platformVersion: ecs.FargatePlatformVersion.LATEST,
   vpcSubnets: {
       subnets: [
-          vpc.publicSubnets[0],
-          vpc.publicSubnets[1],
+          vpc.privateSubnets[0],
+          vpc.privateSubnets[1],
       ]
   },
   securityGroups: [ec2SecurityGroup]
